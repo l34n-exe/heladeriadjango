@@ -1,5 +1,0 @@
-Django
-psycopg
-django-rest-auth
-djangorestframework
-djangorestframework-jwt
