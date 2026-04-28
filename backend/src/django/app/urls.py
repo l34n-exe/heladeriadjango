@@ -4,7 +4,6 @@ from heladeria import urls
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('auth/', include('auth.urls')),
-    path('heladerias/', include(urls)),
-    
+    path('heladerias/', include('heladeria.urls')),
+    path('heladerias/auth/', include('auth_app.urls')), 
 ]

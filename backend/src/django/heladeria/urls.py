@@ -1,6 +1,5 @@
 from django.urls import path
 from .views import (
-    crear_categoria, listar_categorias, obtener_categoria, first_api, serial_v1,
     ProveedorList, ProveedorDetail,
     ClienteList, ClienteDetail,
     EmpleadoList, EmpleadoDetail,
@@ -8,18 +7,10 @@ from .views import (
     ProductoList, ProductoDetail,
     CategoriaList, CategoriaDetail,
     VentaList, VentaDetail,
-    ItemVentaList, ItemVentaDetail,
-    ItemVentaSaborList, ItemVentaSaborDetail
+    DetalleVentaList, DetalleVentaDetail
 )
 
 urlpatterns = [
-    # URLs legacy (mantener por compatibilidad)
-    path('crear_categoria/<str:nombre>/<str:tipo>/<str:descripcion>/', crear_categoria), 
-    path('listar_categorias/', listar_categorias), 
-    path('obtener_categoria/<int:id>/', obtener_categoria), 
-    path('first_api/', first_api), 
-    path('serial_v1/', serial_v1), 
-    
     # URLs de Proveedores
     path('proveedores/', ProveedorList.as_view()), 
     path('proveedores/<int:id>/', ProveedorDetail.as_view()), 
@@ -48,11 +39,10 @@ urlpatterns = [
     path('ventas/', VentaList.as_view()), 
     path('ventas/<int:id>/', VentaDetail.as_view()), 
     
-    # URLs de Items de Venta
-    path('items-venta/', ItemVentaList.as_view()), 
-    path('items-venta/<int:id>/', ItemVentaDetail.as_view()), 
+    # URLs del Detalle de las Ventas (Items)
+    path('detalles/', DetalleVentaList.as_view()), 
+    path('detalles/<int:id>/', DetalleVentaDetail.as_view()), 
     
-    # URLs de Items de Venta Sabor
-    path('items-venta-sabor/', ItemVentaSaborList.as_view()), 
-    path('items-venta-sabor/<int:id>/', ItemVentaSaborDetail.as_view()), 
+    
+
 ]

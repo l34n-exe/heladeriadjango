@@ -1,6 +1,6 @@
 services:
   backend:
-    image: heladeria-django:0.5
+    image: heladeria-django:1.0
     build:
       context: ./backend/config/django-image
     volumes:
@@ -20,7 +20,7 @@ services:
     depends_on:
       - postgres
     networks:
-      red:
+      - red
   postgres:
     image: postgres:15
     environment:
@@ -32,10 +32,7 @@ services:
     volumes:
       - ./data:/var/lib/postgresql/data:delegated
     networks:
-      red:
-
-volumes:
-  postgres_data:
+      - red
 
 networks:
   red:

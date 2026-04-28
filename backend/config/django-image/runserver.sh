@@ -4,7 +4,7 @@ if [ ! -f manage.py ]; then
     django-admin startproject app .
 fi
 
-sleep 2
+sleep 4
 
 python manage.py makemigrations
 python manage.py migrate --noinput

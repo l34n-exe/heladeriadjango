@@ -1,6 +1,6 @@
 from django.apps import AppConfig
 
 
-class AuthConfig(AppConfig):
-    name = 'auth'
+class AuthAppConfig(AppConfig):
+    name = 'auth_app'
     label = 'custom_auth'
