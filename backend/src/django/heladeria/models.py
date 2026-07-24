@@ -149,7 +149,22 @@ class DetalleVenta(models.Model):
                 raise ValidationError("Uno o más sabores seleccionados no están disponibles para este producto.")
         
     def save(self, *args, **kwargs):
-        # Calcular subtotal automáticamente al guardar
+        # Si no se proporcionó precio_unitario, tomar precio_base del producto como fallback
+        if self.precio_unitario is None:
+            try:
+                if self.producto and getattr(self.producto, 'precio_base', None) is not None:
+                    self.precio_unitario = self.producto.precio_base
+            except Exception:
+                # En caso de referencia inconsistente, dejar precio_unitario como None y manejar abajo
+                pass
+
+        # Validar y calcular subtotal automáticamente al guardar
         self.full_clean()  # Llamar a clean() para validar antes de guardar
-        self.subtotal = self.cantidad * self.precio_unitario
+
+        if self.precio_unitario is None:
+            # Si aún no hay precio, usamos 0.00 para evitar errores y marcar el subtotal
+            self.subtotal = Decimal('0.00')
+        else:
+            self.subtotal = self.cantidad * self.precio_unitario
+
         super().save(*args, **kwargs)
