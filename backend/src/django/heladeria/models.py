@@ -78,7 +78,7 @@ class Producto(models.Model):
     nombre = models.CharField(max_length=100)
     descripcion = models.TextField(blank=True)
     max_sabores = models.PositiveIntegerField()
-    tipo_producto = models.CharField(max_length=50, choices=TIPO_PRODUCTO)
+    tipo_producto = models.CharField(max_length=50, choices=TIPO_PRODUCTO, default='POTE 1 KG')
     activo = models.BooleanField(default=True)
     precio_base = models.DecimalField(
         max_digits=10,
