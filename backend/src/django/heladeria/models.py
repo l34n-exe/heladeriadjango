@@ -126,6 +126,8 @@ class DetalleVenta(models.Model):
     precio_unitario = models.DecimalField(
         max_digits=10,
         decimal_places=2,
+        null=True,
+        blank=True,
         validators=[MinValueValidator(Decimal('0.01'))]
     )
     subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
