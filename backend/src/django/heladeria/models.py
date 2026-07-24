@@ -77,12 +77,13 @@ class Producto(models.Model):
     ]
     nombre = models.CharField(max_length=100)
     descripcion = models.TextField(blank=True)
-    max_sabores = models.PositiveIntegerField()
+    max_sabores = models.PositiveIntegerField(default=0)
     tipo_producto = models.CharField(max_length=50, choices=TIPO_PRODUCTO, default='POTE 1 KG')
     activo = models.BooleanField(default=True)
     precio_base = models.DecimalField(
         max_digits=10,
         decimal_places=2,
+        default=Decimal('0.01'),
         validators=[MinValueValidator(Decimal('0.01'))]
     )
     sabores_disponibles = models.ManyToManyField(Sabor, blank=True, related_name='productos', help_text='Sabores disponibles para este producto')
@@ -105,7 +106,7 @@ class Venta(models.Model):
     estado = models.CharField(max_length=20, choices=ESTADO_VENTA, default='PENDIENTE')
     cliente = models.ForeignKey(Cliente, on_delete=models.SET_NULL, null=True, blank=True, related_name='ventas')
     empleado = models.ForeignKey(Empleado, on_delete=models.PROTECT, related_name='ventas')
-    metodo_pago = models.CharField(max_length=20, choices=METODO_PAGO)
+    metodo_pago = models.CharField(max_length=20, choices=METODO_PAGO, default='EFECTIVO')
     fecha_venta = models.DateTimeField(auto_now_add=True)
     total = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
 
@@ -121,7 +122,7 @@ class Venta(models.Model):
 class DetalleVenta(models.Model):
     venta = models.ForeignKey(Venta, on_delete=models.CASCADE, related_name='detalles')
     producto = models.ForeignKey(Producto, on_delete=models.PROTECT, related_name='detalles_venta')    
-    cantidad = models.PositiveIntegerField()
+    cantidad = models.PositiveIntegerField(default=1)
     precio_unitario = models.DecimalField(
         max_digits=10,
         decimal_places=2,
