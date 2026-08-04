@@ -1,5 +1,5 @@
-Django
-psycopg2-binary
-django-rest-auth
-djangorestframework
-djangorestframework-simplejwt
+Django>=4.2,<5.0
+psycopg2-binary>=2.9
+djangorestframework>=3.14
+djangorestframework-simplejwt>=5.3
+django-cors-headers>=4.0

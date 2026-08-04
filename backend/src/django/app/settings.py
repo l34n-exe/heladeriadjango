@@ -8,7 +8,7 @@ SECRET_KEY = 'django-insecure-!91de$7cm++(ep+2*p*3c9$bwkco6(4nd5+=nqimt1x@ou+ouc
 
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['*']  
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -19,6 +19,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'rest_framework_simplejwt',
+    'corsheaders',  
     'heladeria',
     'auth_app.apps.AuthAppConfig',
 ]
@@ -27,20 +28,20 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework_simplejwt.authentication.JWTAuthentication'
     ],
-    'DEFAULT_PERMISSION_CLASSES': [          # todos los endpoints requieren login por defecto
+    'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
     ],
 }
 
-# Configuración de los tokens JWT
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME':  timedelta(hours=8),   # token dura 1 turno de trabajo
+    'ACCESS_TOKEN_LIFETIME': timedelta(hours=8),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
     'AUTH_HEADER_TYPES': ('Bearer',),
 }
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'corsheaders.middleware.CorsMiddleware',  
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -70,14 +71,19 @@ WSGI_APPLICATION = 'app.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.postgresql_psycopg2',
-        'NAME':     os.getenv('POSTGRES_DB'),
-        'USER':     os.getenv('POSTGRES_USER'),
+        'ENGINE': 'django.db.backends.postgresql',  # ← CORREGIDO
+        'NAME': os.getenv('POSTGRES_DB'),
+        'USER': os.getenv('POSTGRES_USER'),
         'PASSWORD': os.getenv('POSTGRES_PASSWORD'),
-        'HOST':     os.getenv('DB_HOST'),
-        'PORT':     '5432',
+        'HOST': os.getenv('DB_HOST'),
+        'PORT': '5432',
     }
 }
+
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
 
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
@@ -86,11 +92,10 @@ AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
 
-# Español y zona horaria Argentina
 LANGUAGE_CODE = 'es-ar'
-TIME_ZONE     = 'America/Argentina/Buenos_Aires'
-USE_I18N      = True
-USE_TZ        = True
+TIME_ZONE = 'America/Argentina/Buenos_Aires'
+USE_I18N = True
+USE_TZ = True
 
 STATIC_URL = 'static/'
 

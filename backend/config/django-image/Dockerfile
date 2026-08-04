@@ -1,21 +1,21 @@
-FROM python:3.14.3
+FROM python:3.13-slim
 
-RUN apt-get update && apt-get install -y python3-dev libgdal-dev graphviz graphviz-dev
+WORKDIR /usr/src/app
 
-WORKDIR /usr/src/app 
+RUN apt-get update && apt-get install -y \
+    libpq-dev \
+    gcc \
+    netcat-traditional \
+    && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --upgrade pip && pip install --upgrade setuptools
+RUN pip install --upgrade pip setuptools
 
 COPY requirements.txt ./
-
 RUN pip install --no-cache-dir -r requirements.txt
 
-EXPOSE 8000
-
-RUN mkdir -p /scripts
 COPY runserver.sh /scripts/runserver.sh
 RUN chmod +x /scripts/runserver.sh
 
-CMD [ "/scripts/runserver.sh" ]
+EXPOSE 8000
 
-#CMD [ "python", "manage.py", "runserver", "0.0.0.0:8000" ]
+CMD [ "/scripts/runserver.sh" ]
