@@ -8,48 +8,55 @@ from .serializers import (
 )
 
 
+class IsAuthenticatedStaffForWrite(permissions.BasePermission):
+    def has_permission(self, request, view):
+        if request.method in permissions.SAFE_METHODS:
+            return bool(request.user and request.user.is_authenticated)
+        return bool(request.user and request.user.is_authenticated and request.user.is_staff)
+
+
 class EmpleadoList(generics.ListCreateAPIView):
     queryset = Empleado.objects.all()
     serializer_class = EmpleadoSerializer
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [IsAuthenticatedStaffForWrite]
 
 class EmpleadoDetail(generics.RetrieveUpdateDestroyAPIView):
     queryset = Empleado.objects.all()
     serializer_class = EmpleadoSerializer
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [IsAuthenticatedStaffForWrite]
 
 
 class ClienteList(generics.ListCreateAPIView):
     queryset = Cliente.objects.all()
     serializer_class = ClienteSerializer
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [IsAuthenticatedStaffForWrite]
 
 class ClienteDetail(generics.RetrieveUpdateDestroyAPIView):
     queryset = Cliente.objects.all()
     serializer_class = ClienteSerializer
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [IsAuthenticatedStaffForWrite]
 
 
 class SaborList(generics.ListCreateAPIView):
     queryset = Sabor.objects.all()
     serializer_class = SaborSerializer
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [IsAuthenticatedStaffForWrite]
 
 class SaborDetail(generics.RetrieveUpdateDestroyAPIView):
     queryset = Sabor.objects.all()
     serializer_class = SaborSerializer
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [IsAuthenticatedStaffForWrite]
 
 
 class ProductoList(generics.ListCreateAPIView):
     queryset = Producto.objects.all()
     serializer_class = ProductoSerializer
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [IsAuthenticatedStaffForWrite]
 
 class ProductoDetail(generics.RetrieveUpdateDestroyAPIView):
     queryset = Producto.objects.all()
     serializer_class = ProductoSerializer
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [IsAuthenticatedStaffForWrite]
 
 
 class VentaList(generics.ListCreateAPIView):
@@ -58,14 +65,14 @@ class VentaList(generics.ListCreateAPIView):
         'detalles__producto', 'detalles__sabores'
     ).all()
     serializer_class = VentaSerializer
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [IsAuthenticatedStaffForWrite]
 
 class VentaDetail(generics.RetrieveUpdateDestroyAPIView):
     queryset = Venta.objects.select_related('cliente', 'empleado').prefetch_related(
         'detalles__producto', 'detalles__sabores'
     ).all()
     serializer_class = VentaSerializer
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [IsAuthenticatedStaffForWrite]
 
     def perform_destroy(self, instance):
         # Impide eliminar ventas completadas o canceladas.
@@ -80,12 +87,12 @@ class VentaDetail(generics.RetrieveUpdateDestroyAPIView):
 class DetalleVentaList(generics.ListCreateAPIView):
     queryset = DetalleVenta.objects.select_related('venta', 'producto').prefetch_related('sabores').all()
     serializer_class = DetalleVentaSerializer
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [IsAuthenticatedStaffForWrite]
 
 class DetalleVentaDetail(generics.RetrieveUpdateDestroyAPIView):
     queryset = DetalleVenta.objects.select_related('venta', 'producto').prefetch_related('sabores').all()
     serializer_class = DetalleVentaSerializer
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [IsAuthenticatedStaffForWrite]
 
     def perform_destroy(self, instance):
         # Impide eliminar detalles de ventas completadas o canceladas.

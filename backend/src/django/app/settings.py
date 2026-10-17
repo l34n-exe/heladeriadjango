@@ -2,13 +2,27 @@ from pathlib import Path
 from datetime import timedelta
 import os
 
+from django.core.exceptions import ImproperlyConfigured
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = 'django-insecure-!91de$7cm++(ep+2*p*3c9$bwkco6(4nd5+=nqimt1x@ou+ouc'
+DEBUG = os.getenv('DJANGO_DEBUG', 'True').lower() in {'1', 'true', 'yes', 'on'}
 
-DEBUG = True
+SECRET_KEY = os.getenv('DJANGO_SECRET_KEY')
+if not SECRET_KEY:
+    if DEBUG:
+        SECRET_KEY = 'development-only-insecure-key-that-is-long-enough-for-jwt-12345'
+    else:
+        raise ImproperlyConfigured('DJANGO_SECRET_KEY debe estar definida cuando DEBUG es False.')
 
-ALLOWED_HOSTS = ['*']  
+if len(SECRET_KEY.encode('utf-8')) < 32:
+    SECRET_KEY = f"{SECRET_KEY}{'x' * (32 - len(SECRET_KEY.encode('utf-8')))}"
+
+ALLOWED_HOSTS = [
+    host.strip()
+    for host in os.getenv('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+    if host.strip()
+]
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -19,8 +33,8 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'rest_framework_simplejwt',
-    'corsheaders',  
-    'heladeria',
+    'corsheaders',
+    'heladeria.apps.HeladeriaConfig',
     'auth_app.apps.AuthAppConfig',
 ]
 
@@ -71,18 +85,53 @@ WSGI_APPLICATION = 'app.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.postgresql',  # ← CORREGIDO
+        'ENGINE': 'django.db.backends.postgresql',
         'NAME': os.getenv('POSTGRES_DB'),
         'USER': os.getenv('POSTGRES_USER'),
         'PASSWORD': os.getenv('POSTGRES_PASSWORD'),
         'HOST': os.getenv('DB_HOST'),
-        'PORT': '5432',
+        'PORT': os.getenv('DB_PORT', '5432'),
     }
 }
 
-CORS_ALLOWED_ORIGINS = [
+DEFAULT_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    "http://localhost:4173",
+    "http://127.0.0.1:4173",
+    "http://localhost:4174",
+    "http://127.0.0.1:4174",
+    "http://localhost:5174",
+    "http://127.0.0.1:5174",
+    "http://localhost:5175",
+    "http://127.0.0.1:5175",
+]
+
+extra_allowed_origins = [
+    origin.strip()
+    for origin in os.getenv('CORS_ALLOWED_ORIGINS', '').split(',')
+    if origin.strip()
+]
+
+CORS_ALLOWED_ORIGINS = extra_allowed_origins or DEFAULT_ALLOWED_ORIGINS
+CORS_ALLOW_ALL_ORIGINS = not extra_allowed_origins
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_HEADERS = ["*"]
+CORS_ALLOW_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"]
+
+extra_csrf_origins = [
+    origin.strip()
+    for origin in os.getenv('CSRF_TRUSTED_ORIGINS', '').split(',')
+    if origin.strip()
+]
+
+CSRF_TRUSTED_ORIGINS = extra_csrf_origins or [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:4173",
+    "http://127.0.0.1:4173",
+    "http://localhost:4174",
+    "http://127.0.0.1:4174",
 ]
 
 AUTH_PASSWORD_VALIDATORS = [

@@ -1,3 +1,3 @@
 #!/bin/bash
 
-docker-compose exec backend python manage.py shell
+docker compose exec heladeria_api python manage.py shell

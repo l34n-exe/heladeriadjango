@@ -4,8 +4,24 @@ from decimal import Decimal, ROUND_HALF_UP
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
 from django.db import models, transaction
-from django.db.models import Sum
+from django.db.models import Q, Sum
 from django.utils import timezone
+
+# QuerySets personalizados para Venta y DetalleVenta que implementan restricciones de eliminación.
+class VentaQuerySet(models.QuerySet):
+    def delete(self, *args, **kwargs):
+        if self.filter(estado__in={Venta.COMPLETADA, Venta.CANCELADA}).exists():
+            raise ValidationError('No se pueden eliminar ventas completadas o canceladas.')
+        return super().delete(*args, **kwargs)
+
+
+class DetalleVentaQuerySet(models.QuerySet):
+    def delete(self, *args, **kwargs):
+        if self.filter(venta__estado__in={Venta.COMPLETADA, Venta.CANCELADA}).exists():
+            raise ValidationError(
+                'No se pueden eliminar detalles de una venta completada o cancelada.'
+            )
+        return super().delete(*args, **kwargs)
 
 
 class Persona(models.Model):
@@ -34,7 +50,7 @@ class Empleado(Persona):
     ]
 
     puesto = models.CharField(max_length=50, choices=PUESTO)
-    fecha_contratacion = models.DateField(null=True, blank=True, default=timezone.now, help_text='Fecha de contratación (puede ser nula si no se conoce)')
+    fecha_contratacion = models.DateField(null=True, blank=True, default=timezone.localdate, help_text='Fecha de contratación (puede ser nula si no se conoce)')
 
     def __str__(self):
         return f"{self.nombre} {self.apellido} - {self.puesto}"
@@ -75,6 +91,14 @@ class Sabor(models.Model):
         validators=[MinValueValidator(Decimal('0.000'))],
     )
     disponible = models.BooleanField(default=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                check=Q(stock_kg__gte=Decimal('0.000')),  # type: ignore[call-arg]
+                name='sabor_stock_kg_no_negativo',
+            ),
+        ]
 
     def __str__(self):
         return f"{self.nombre} - {self.categoria}"
@@ -144,6 +168,31 @@ class Producto(models.Model):
     def __str__(self):
         return f"{self.nombre} - {self.tipo_producto} - ${self.precio_base} - Max {self.max_sabores} sabores"
 
+    def save(self, *args, **kwargs):
+        defaults = self.DEFAULTS_POR_TIPO.get(self.tipo_producto)
+        producto_anterior = None
+        if self.pk:
+            producto_anterior = Producto.objects.get(pk=self.pk)
+
+        if defaults and self._state.adding and self.gramos == 0 and self.max_sabores == 0:
+            self.gramos = defaults['gramos']
+            self.max_sabores = defaults['max_sabores']
+        elif (
+            defaults
+            and producto_anterior
+            and producto_anterior.tipo_producto != self.tipo_producto
+            and self.gramos == self.DEFAULTS_POR_TIPO.get(
+                producto_anterior.tipo_producto, {}
+            ).get('gramos')
+            and self.max_sabores == self.DEFAULTS_POR_TIPO.get(
+                producto_anterior.tipo_producto, {}
+            ).get('max_sabores')
+        ):
+            self.gramos = defaults['gramos']
+            self.max_sabores = defaults['max_sabores']
+
+        return super().save(*args, **kwargs)
+
 
 class Venta(models.Model):
     PENDIENTE = 'PENDIENTE'
@@ -173,6 +222,7 @@ class Venta(models.Model):
     metodo_pago = models.CharField(max_length=20, choices=METODO_PAGO, default=EFECTIVO)
     fecha_venta = models.DateTimeField(auto_now_add=True)
     total = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    objects = VentaQuerySet.as_manager()
 
     class Meta:
         ordering = ['-fecha_venta']
@@ -190,7 +240,28 @@ class Venta(models.Model):
             if self.pk:
                 estado_anterior = Venta.objects.select_for_update().get(pk=self.pk).estado
 
+            if estado_anterior is None and self.estado != self.PENDIENTE:
+                raise ValidationError('Una venta nueva debe comenzar en estado pendiente.')
+
+            transiciones_permitidas = {
+                None: {self.PENDIENTE, self.COMPLETADA, self.CANCELADA},
+                self.PENDIENTE: {self.PENDIENTE, self.COMPLETADA, self.CANCELADA},
+                self.COMPLETADA: {self.COMPLETADA, self.CANCELADA},
+                self.CANCELADA: {self.CANCELADA},
+            }
+            if self.estado not in transiciones_permitidas[estado_anterior]:
+                raise ValidationError(
+                    f"No se puede cambiar una venta de {estado_anterior} a {self.estado}."
+                )
+
             super().save(*args, **kwargs)
+
+            if (
+                self.estado == self.COMPLETADA
+                and self.pk
+                and not DetalleVenta.objects.filter(venta=self).exists()
+            ):
+                raise ValidationError('No se puede completar una venta sin detalles.')
 
             if estado_anterior != self.COMPLETADA and self.estado == self.COMPLETADA:
                 self._ajustar_stock_sabores(descontar=True)
@@ -213,12 +284,16 @@ class Venta(models.Model):
             if not sabores or detalle.producto.gramos == 0:
                 continue
 
+            gramos = detalle.gramos_unitarios
+            if gramos is None:
+                gramos = detalle.producto.gramos
+
             kg = (
-                Decimal(detalle.producto.gramos)
+                Decimal(gramos)
                 / Decimal(len(sabores))
                 / Decimal('1000')
                 * Decimal(str(detalle.cantidad))
-            ).quantize(Decimal('0.001'))
+            )
 
             for sabor in sabores:
                 kg_por_sabor[sabor.pk] += kg
@@ -235,14 +310,16 @@ class Venta(models.Model):
             if descontar:
                 for sabor_id, kg in kg_por_sabor.items():
                     sabor = sabores_map[sabor_id]
-                    if sabor.stock_kg < kg:
+                    kg_redondeado = kg.quantize(Decimal('0.001'), rounding=ROUND_HALF_UP)
+                    if sabor.stock_kg < kg_redondeado:
                         raise ValidationError(
                             f"Stock insuficiente de '{sabor.nombre}'. "
-                            f"Disponible: {sabor.stock_kg} kg, requerido: {kg} kg."
+                            f"Disponible: {sabor.stock_kg} kg, requerido: {kg_redondeado} kg."
                         )
 
             for sabor_id, kg in kg_por_sabor.items():
                 sabor = sabores_map[sabor_id]
+                kg = kg.quantize(Decimal('0.001'), rounding=ROUND_HALF_UP)
                 sabor.stock_kg += -kg if descontar else kg
                 # Mantener 3 decimales para stock_kg
                 sabor.stock_kg = Decimal(sabor.stock_kg).quantize(Decimal('0.001'), rounding=ROUND_HALF_UP)
@@ -273,38 +350,64 @@ class DetalleVenta(models.Model):
         validators=[MinValueValidator(Decimal('0.01'))],
     )
     subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    gramos_unitarios = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        default=None,
+        editable=False,
+    )
     sabores = models.ManyToManyField(
         Sabor,
         blank=True,
         related_name='detalles_venta',
         limit_choices_to={'disponible': True},
     )
+    objects = DetalleVentaQuerySet.as_manager()
 
     def __str__(self):
         return f"Detalle #{self.pk} - {self.producto.nombre} - {self.cantidad}"
 
+    @staticmethod
+    def validar_sabores(producto, sabores):
+        sabores_seleccionados = list(sabores)
+
+        if len(sabores_seleccionados) > producto.max_sabores:
+            raise ValidationError(
+                f"El producto {producto.nombre} permite un máximo de "
+                f"{producto.max_sabores} sabores."
+            )
+
+        permitidos = set(
+            producto.sabores_disponibles.filter(disponible=True).values_list('pk', flat=True)
+        )
+        seleccionados = {getattr(sabor, 'pk', sabor) for sabor in sabores_seleccionados}
+        if not seleccionados.issubset(permitidos):
+            raise ValidationError(
+                "Uno o más sabores seleccionados no están disponibles para este producto."
+            )
+
     # Validaciones de modelo para asegurar que la cantidad de sabores seleccionados no exceda el máximo permitido por el producto y que los sabores seleccionados estén disponibles para ese producto.
     def clean(self):
         if self.pk is not None:
-            if self.producto.max_sabores > 0 and self.sabores.count() > self.producto.max_sabores:
+            if self.venta.estado != Venta.PENDIENTE:
                 raise ValidationError(
-                    f"El producto {self.producto.nombre} permite un máximo de "
-                    f"{self.producto.max_sabores} sabores."
+                    "No se pueden modificar detalles de una venta que no está pendiente."
                 )
 
-            if self.producto.sabores_disponibles.exists():
-                permitidos = set(self.producto.sabores_disponibles.values_list('id', flat=True))
-                seleccionados = set(self.sabores.values_list('id', flat=True))
-                if not seleccionados.issubset(permitidos):
-                    raise ValidationError(
-                        "Uno o más sabores seleccionados no están disponibles para este producto."
-                    )
+            self.validar_sabores(self.producto, self.sabores.all())
     # Guarda el detalle, aplicando fallback de precio_unitario y calculando el subtotal
     def save(self, *args, **kwargs):
+        if self.venta.estado != Venta.PENDIENTE:
+            raise ValidationError(
+                "No se pueden modificar detalles de una venta que no está pendiente."
+            )
 
         if self.precio_unitario is None:
             # Si no se proporciona precio_unitario, usar el precio_base del producto.
             self.precio_unitario = self.producto.precio_base
+
+        if self.gramos_unitarios is None:
+            self.gramos_unitarios = self.producto.gramos
 
         # Ejecutar validaciones de modelo por defecto
         skip_validation = kwargs.pop('skip_validation', False)
@@ -316,3 +419,10 @@ class DetalleVenta(models.Model):
         self.subtotal = subtotal.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
         super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        if self.venta.estado != Venta.PENDIENTE:
+            raise ValidationError(
+                "No se pueden eliminar detalles de una venta que no está pendiente."
+            )
+        return super().delete(*args, **kwargs)
