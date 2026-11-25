@@ -7,5 +7,4 @@ export interface Producto {
   activo: boolean;
   precio_base: string;
   gramos: number;
-  sabores_disponibles: number[];
 }

@@ -323,6 +323,15 @@ class Venta(models.Model):
         cliente_nombre = f"{self.cliente.nombre} {self.cliente.apellido}" if self.cliente else "Cliente anónimo"
         return f"Venta #{self.pk} - {cliente_nombre} (${self.total})"
 
+    @property
+    def TRANSICIONES_PERMITIDAS(self):
+        return {
+            self.PENDIENTE: {self.PENDIENTE, self.COMPLETADA, self.CANCELADA},
+            self.COMPLETADA: {self.COMPLETADA, self.REEMBOLSADA},
+            self.CANCELADA: {self.CANCELADA},
+            self.REEMBOLSADA: {self.REEMBOLSADA},
+        }
+
     def clean(self):
         super().clean()
         
@@ -378,6 +387,13 @@ class Venta(models.Model):
 
             if not creada:
                 estado_anterior = Venta.objects.select_for_update().get(pk=self.pk).estado
+                # Se revalida con el estado bloqueado: otra transacción pudo cambiarlo
+                # entre full_clean() y el bloqueo.
+                if self.estado not in self.TRANSICIONES_PERMITIDAS[estado_anterior]:
+                    raise ValidationError(
+                        f"La venta cambió de estado a '{estado_anterior}' mientras se procesaba; "
+                        f"no se puede pasar a '{self.estado}'."
+                    )
 
                 if estado_anterior == self.PENDIENTE and self.estado == self.COMPLETADA:
                     self._procesar_salida_envases(usuario)
@@ -526,12 +542,17 @@ class Venta(models.Model):
             )
 
     def _procesar_devolucion_envases(self, usuario):
+        """Revierte los movimientos SALIDA de envases de esta venta, sin mirar el producto actual."""
         unidades_por_envase = defaultdict(int)
 
-        for detalle in DetalleVenta.objects.filter(venta=self).select_related('envase', 'producto'):
-            envase_id = getattr(detalle, 'envase_id', None) or detalle.producto.envase_id
-            if envase_id:
-                unidades_por_envase[envase_id] += detalle.cantidad
+        salidas = MovimientoEnvase.objects.filter(
+            venta=self, tipo_movimiento=MovimientoEnvase.SALIDA
+        )
+        for mov in salidas:
+            unidades_por_envase[mov.envase_id] += mov.cantidad_unidades
+
+        if not unidades_por_envase:
+            return
 
         envases = {
             envase.pk: envase
@@ -609,6 +630,12 @@ class Venta(models.Model):
         salidas = self.movimientos_stock.filter(  # type: ignore[attr-defined]
             tipo_movimiento=MovimientoStock.SALIDA
         ).order_by('sabor_id', 'pk')
+
+        if not salidas.exists() and self.detalles.filter(sabores__isnull=False).exists():  # type: ignore[attr-defined]
+            raise ValidationError(
+                "La venta no tiene movimientos de stock registrados (es anterior a su incorporación). "
+                "Ajustá el stock manualmente antes de reembolsarla."
+            )
 
         for mov in salidas:
             sabor = Sabor.objects.select_for_update().get(pk=mov.sabor_id)

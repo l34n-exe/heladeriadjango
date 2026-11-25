@@ -851,3 +851,42 @@ class DetalleVentaCambioProductoTests(TestCase):
         self.assertEqual(detalle.precio_unitario, Decimal('900.00'))
         self.assertEqual(detalle.gramos_unitarios, 1000)
         self.assertEqual(venta.total, Decimal('900.00'))
+
+
+class VentaReembolsoRobustezTests(VentaFlujoApiTests):
+    def test_cancelar_con_instancia_desactualizada_no_pisa_venta_completada(self):
+        venta = self.crear_venta_api()
+        copia_vieja = Venta.objects.get(pk=venta.pk)
+        venta.cambiar_estado(Venta.COMPLETADA, usuario=self.user_cajero)
+
+        with self.assertRaises(ValidationError):
+            copia_vieja.cambiar_estado(Venta.CANCELADA, usuario=self.user_cajero)
+
+        venta.refresh_from_db()
+        self.assertEqual(venta.estado, Venta.COMPLETADA)
+
+    def test_reembolso_no_repone_envase_asignado_despues_de_completar(self):
+        Producto.objects.filter(pk=self.producto.pk).update(envase=None)
+        venta = self.crear_venta_api()
+        self.client.post(f'/heladerias/ventas/{venta.pk}/completar/')
+        Producto.objects.filter(pk=self.producto.pk).update(envase=self.envase)
+        self.client.force_authenticate(user=self.user_gerente)  # type: ignore
+
+        response = self.client.post(f'/heladerias/ventas/{venta.pk}/reembolsar/')
+
+        self.assertEqual(response.status_code, 200)
+        self.envase.refresh_from_db()
+        self.assertEqual(self.envase.stock_unidades, 5)
+
+    def test_reembolso_sin_movimientos_de_stock_exige_ajuste_manual(self):
+        venta = self.crear_venta_api()
+        self.client.post(f'/heladerias/ventas/{venta.pk}/completar/')
+        # Simula una venta anterior a MovimientoStock (el modelo prohíbe borrar movimientos).
+        MovimientoStock.objects.filter(venta=venta)._raw_delete(using='default')
+        self.client.force_authenticate(user=self.user_gerente)  # type: ignore
+
+        response = self.client.post(f'/heladerias/ventas/{venta.pk}/reembolsar/')
+
+        self.assertEqual(response.status_code, 400)
+        venta.refresh_from_db()
+        self.assertEqual(venta.estado, Venta.COMPLETADA)

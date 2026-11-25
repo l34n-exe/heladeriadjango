@@ -37,6 +37,7 @@
           <td>{{ venta.total }}</td>
           <td class="acciones">
             <ButtonComponent
+              v-if="venta.estado === 'PENDIENTE'"
               :to="{ name: 'ventas_edit', params: { id: venta.id } }"
               style="color: #1976d2"
             >
@@ -58,6 +59,7 @@
               MOSTRAR
             </ButtonComponent>
             <ButtonComponent
+              v-if="venta.estado === 'PENDIENTE'"
               @click="requestDelete(venta.id as number)"
               style="color: red"
             >
@@ -152,9 +154,11 @@ const deleteVenta = async () => {
 };
 
 onMounted(async () => {
-  await useClientesStore().getAll();
-  await useEmpleadosStore().getAll();
   await getAll();
+  await Promise.allSettled([
+    useClientesStore().getAll(),
+    useEmpleadosStore().getAll(),
+  ]);
 });
 </script>
 

@@ -87,20 +87,6 @@
           class="mt-2"
         />
 
-        <v-select
-          v-model="producto.sabores_disponibles"
-          :items="sabores"
-          item-title="nombre"
-          item-value="id"
-          label="Sabores disponibles"
-          multiple
-          chips
-          clearable
-          variant="outlined"
-          :rules="[(v) => !!v.length || 'Debe seleccionar al menos un sabor']"
-          required
-        />
-
         <ButtonComponent type="submit" class="crear mt-4">
           <template #pre-icon>
             <Icon icon="mdi-light:check" style="color: #05f036" />
@@ -124,17 +110,13 @@
   </div>
 </template>
 <script setup lang="ts">
-import { ref, toRefs, onMounted } from "vue";
+import { ref, toRefs } from "vue";
 import useProductosStore from "../../stores/productos";
-import useSaboresStore from "../../stores/sabores";
 import ButtonComponent from "../ButtonComponent.vue";
 import { Icon } from "@iconify/vue";
 import type { Producto } from "../../interfaces/Producto";
 import { useFormFeedback } from "../../composables/useFormFeedback";
 
-const sab = useSaboresStore();
-const { sabores } = toRefs(sab);
-const { getAll } = sab;
 
 const store = useProductosStore();
 const { producto } = toRefs(store);
@@ -145,10 +127,6 @@ const form = ref<{
 } | null>(null);
 const { snackbar, snackbarColor, snackbarText, showFeedback, validateForm } =
   useFormFeedback();
-
-onMounted(async () => {
-  await getAll();
-});
 
 const productoptions = [
   { title: "Pote 1kg", value: "POTE_1KG" },
@@ -172,7 +150,6 @@ function limpiarProducto() {
     tipo_producto: "",
     activo: true,
     gramos: 0,
-    sabores_disponibles: [],
   } satisfies Producto;
 }
 
@@ -193,7 +170,6 @@ const crear = async () => {
       tipo_producto: producto.value.tipo_producto,
       activo: Boolean(producto.value.activo),
       gramos: Number(producto.value.gramos),
-      sabores_disponibles: producto.value.sabores_disponibles,
     };
 
     await create(data);

@@ -197,14 +197,22 @@ const deleteVenta = async () => {
 };
 
 onMounted(async () => {
-  await useClientesStore().getAll();
-  await useEmpleadosStore().getAll();
-  await useProductosStore().getAll();
-  await useSaboresStore().getAll();
+  store.venta = { ...store.venta, id: 0, estado: "", detalles: [] };
   const id = Number(route.params.id);
-  if (id) {
-    await getOne(id);
+  try {
+    if (id) {
+      await getOne(id);
+    }
+  } catch (error) {
+    showFeedback(getApiErrorMessage(error), "error");
   }
+  // Los catálogos son solo para mostrar nombres; un 403 (p. ej. empleados para cajero) no debe cortar la carga.
+  await Promise.allSettled([
+    useClientesStore().getAll(),
+    useEmpleadosStore().getAll(),
+    useProductosStore().getAll(),
+    useSaboresStore().getAll(),
+  ]);
 });
 </script>
 

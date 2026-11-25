@@ -18,16 +18,6 @@
         <p><strong>ACTIVO:</strong> {{ producto.activo ? "Sí" : "No" }}</p>
         <p><strong>PRECIO BASE:</strong> {{ producto.precio_base }}</p>
         <p><strong>GRAMOS:</strong> {{ producto.gramos }}</p>
-        <p>
-          <strong>SABORES DISPONIBLES:</strong>
-          {{
-            producto.sabores_disponibles.length
-              ? producto.sabores_disponibles
-                  .map((id) => getSaborNombre(id))
-                  .join(", ")
-              : "Ninguno"
-          }}
-        </p>
         <div class="acciones">
           <ButtonComponent
             :to="{ name: 'productos_edit', params: { id: producto.id } }"
@@ -95,7 +85,6 @@ import { toRefs, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import useProductosStore from "../../stores/productos";
 import useDetallesStore from "../../stores/detalles";
-import useSaboresStore from "../../stores/sabores";
 import ButtonComponent from "../ButtonComponent.vue";
 import ConfirmDialog from "../ConfirmDialog.vue";
 import { Icon } from "@iconify/vue";
@@ -104,7 +93,6 @@ import { useFormFeedback } from "../../composables/useFormFeedback";
 const store = useProductosStore();
 const { producto } = toRefs(store);
 const { detalles } = toRefs(useDetallesStore());
-const { sabores } = toRefs(useSaboresStore());
 const { getOne, destroy } = store;
 const route = useRoute();
 const router = useRouter();
@@ -112,9 +100,6 @@ const { snackbar, snackbarColor, snackbarText, showFeedback } =
   useFormFeedback();
 const confirmDialog = ref(false);
 const pendingDeleteId = ref<number | null>(null);
-
-const getSaborNombre = (id: number) =>
-  sabores.value.find((sabor) => sabor.id === id)?.nombre ?? `ID ${id}`;
 
 const requestDelete = (id: number) => {
   pendingDeleteId.value = id;
@@ -136,7 +121,6 @@ const deleteProducto = async () => {
 };
 
 onMounted(async () => {
-  await useSaboresStore().getAll();
   await useDetallesStore().getAll();
   const id = Number(route.params.id);
   if (id) {

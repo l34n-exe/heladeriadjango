@@ -82,7 +82,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, toRefs } from "vue";
-import { useRoute } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import useVentasStore from "../../stores/ventas";
 import useClientesStore from "../../stores/clientes";
 import ButtonComponent from "../ButtonComponent.vue";
@@ -93,6 +93,7 @@ import type { Venta } from "../../interfaces/Venta";
 import { useFormFeedback } from "../../composables/useFormFeedback";
 
 const route = useRoute();
+const router = useRouter();
 const ventasStore = useVentasStore();
 const clientesStore = useClientesStore();
 
@@ -160,9 +161,8 @@ const actualizar = async () => {
     };
 
     await update(data);
-    form.value?.reset();
-    limpiarVenta();
     showFeedback("Venta actualizada con éxito.", "success");
+    router.push({ name: "ventas_show", params: { id: data.id } });
   } catch (error) {
     console.error("Error al actualizar la venta:", error);
     showFeedback(

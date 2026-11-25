@@ -11,7 +11,6 @@ const defaultProducto: Producto = {
   activo: false,
   precio_base: "0.00",
   gramos: 0,
-  sabores_disponibles: [],
 };
 
 const useProductosStore = defineStore("productos", () => {
