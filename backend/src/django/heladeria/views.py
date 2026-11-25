@@ -1,103 +1,96 @@
-from rest_framework import generics, permissions
-from rest_framework.exceptions import ValidationError
+from rest_framework import viewsets
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from django.core.exceptions import ValidationError
 
-from .models import Cliente, DetalleVenta, Empleado, Producto, Sabor, Venta
-from .serializers import (
-    ClienteSerializer, DetalleVentaSerializer, EmpleadoSerializer,
-    ProductoSerializer, SaborSerializer, VentaSerializer,
+from .models import (
+    Empleado, Cliente, Sabor, Producto, Venta, DetalleVenta,
+    Auditoria, MovimientoStock, MovimientoEnvase, Envase,
 )
+from .serializers import (
+    EmpleadoSerializer, ClienteSerializer, SaborSerializer, 
+    ProductoSerializer, VentaSerializer, DetalleVentaSerializer, 
+    AuditoriaSerializer, MovimientoStockSerializer,
+    MovimientoEnvaseSerializer, EnvaseSerializer,
+)
+from .permissions import EsGerente, EsCajeroOGerente, SoloLecturaGerencial, EsCajeroLecturaOGerenteEscritura
 
 
-class IsAuthenticatedStaffForWrite(permissions.BasePermission):
-    def has_permission(self, request, view):
-        if request.method in permissions.SAFE_METHODS:
-            return bool(request.user and request.user.is_authenticated)
-        return bool(request.user and request.user.is_authenticated and request.user.is_staff)
-
-
-class EmpleadoList(generics.ListCreateAPIView):
+class EmpleadoViewSet(viewsets.ModelViewSet):
     queryset = Empleado.objects.all()
     serializer_class = EmpleadoSerializer
-    permission_classes = [IsAuthenticatedStaffForWrite]
-
-class EmpleadoDetail(generics.RetrieveUpdateDestroyAPIView):
-    queryset = Empleado.objects.all()
-    serializer_class = EmpleadoSerializer
-    permission_classes = [IsAuthenticatedStaffForWrite]
+    permission_classes = [EsGerente]  # Solo los gerentes administran empleados
 
 
-class ClienteList(generics.ListCreateAPIView):
+class ClienteViewSet(viewsets.ModelViewSet):
     queryset = Cliente.objects.all()
     serializer_class = ClienteSerializer
-    permission_classes = [IsAuthenticatedStaffForWrite]
-
-class ClienteDetail(generics.RetrieveUpdateDestroyAPIView):
-    queryset = Cliente.objects.all()
-    serializer_class = ClienteSerializer
-    permission_classes = [IsAuthenticatedStaffForWrite]
+    permission_classes = [EsCajeroOGerente]  # Cajeros y gerentes gestionan clientes
 
 
-class SaborList(generics.ListCreateAPIView):
+class SaborViewSet(viewsets.ModelViewSet):
     queryset = Sabor.objects.all()
     serializer_class = SaborSerializer
-    permission_classes = [IsAuthenticatedStaffForWrite]
+    permission_classes = [EsCajeroLecturaOGerenteEscritura]
 
-class SaborDetail(generics.RetrieveUpdateDestroyAPIView):
-    queryset = Sabor.objects.all()
-    serializer_class = SaborSerializer
-    permission_classes = [IsAuthenticatedStaffForWrite]
-
-
-class ProductoList(generics.ListCreateAPIView):
+class ProductoViewSet(viewsets.ModelViewSet):
     queryset = Producto.objects.all()
     serializer_class = ProductoSerializer
-    permission_classes = [IsAuthenticatedStaffForWrite]
+    permission_classes = [EsCajeroLecturaOGerenteEscritura]
 
-class ProductoDetail(generics.RetrieveUpdateDestroyAPIView):
-    queryset = Producto.objects.all()
-    serializer_class = ProductoSerializer
-    permission_classes = [IsAuthenticatedStaffForWrite]
+class EnvaseViewSet(viewsets.ModelViewSet):
+    queryset = Envase.objects.all()
+    serializer_class = EnvaseSerializer
+    permission_classes = [EsCajeroLecturaOGerenteEscritura]
 
-
-class VentaList(generics.ListCreateAPIView):
-    # Optimiza consultas con select_related para evitar el problema N+1.
-    queryset = Venta.objects.select_related('cliente', 'empleado').prefetch_related(
-        'detalles__producto', 'detalles__sabores'
-    ).all()
+class VentaViewSet(viewsets.ModelViewSet):
+    queryset = Venta.objects.all()
     serializer_class = VentaSerializer
-    permission_classes = [IsAuthenticatedStaffForWrite]
+    permission_classes = [EsCajeroOGerente]
 
-class VentaDetail(generics.RetrieveUpdateDestroyAPIView):
-    queryset = Venta.objects.select_related('cliente', 'empleado').prefetch_related(
-        'detalles__producto', 'detalles__sabores'
-    ).all()
-    serializer_class = VentaSerializer
-    permission_classes = [IsAuthenticatedStaffForWrite]
+    def perform_create(self, serializer):
+        # Asignamos el empleado logueado automáticamente si existe
+        empleado = getattr(self.request.user, 'empleado', None)
+        serializer.save(empleado=empleado)
 
-    def perform_destroy(self, instance):
-        # Impide eliminar ventas completadas o canceladas.
-        # El modelo también lo valida, pero este control da un error más claro a la API.
-        if instance.estado in (Venta.COMPLETADA, Venta.CANCELADA):
-            raise ValidationError(
-                f"No se puede eliminar una venta con estado {instance.get_estado_display()}."
-            )
-        super().perform_destroy(instance)
+    @action(detail=True, methods=['post'],permission_classes=[EsCajeroOGerente])
+    def cancelar(self, request, pk=None):
+        venta = self.get_object()
+        try:
+            venta.cambiar_estado(Venta.CANCELADA, usuario=request.user)
+            return Response({'status': 'Venta cancelada exitosamente.'})
+        except ValidationError as e:
+            return Response({'error': str(e)}, status=400)
+
+    @action(detail=True, methods=['post'], permission_classes=[EsGerente])
+    def reembolsar(self, request, pk=None):
+        venta = self.get_object()
+        try:
+            venta.cambiar_estado(Venta.REEMBOLSADA, usuario=request.user)
+            return Response({'status': 'Venta reembolsada exitosamente con devolución de stock.'})
+        except ValidationError as e:
+            return Response({'error': str(e)}, status=400)
 
 
-class DetalleVentaList(generics.ListCreateAPIView):
-    queryset = DetalleVenta.objects.select_related('venta', 'producto').prefetch_related('sabores').all()
+class DetalleVentaViewSet(viewsets.ModelViewSet):
+    queryset = DetalleVenta.objects.all()
     serializer_class = DetalleVentaSerializer
-    permission_classes = [IsAuthenticatedStaffForWrite]
+    permission_classes = [EsCajeroOGerente]
 
-class DetalleVentaDetail(generics.RetrieveUpdateDestroyAPIView):
-    queryset = DetalleVenta.objects.select_related('venta', 'producto').prefetch_related('sabores').all()
-    serializer_class = DetalleVentaSerializer
-    permission_classes = [IsAuthenticatedStaffForWrite]
 
-    def perform_destroy(self, instance):
-        # Impide eliminar detalles de ventas completadas o canceladas.
-        if instance.venta.estado in (Venta.COMPLETADA, Venta.CANCELADA):
-            raise ValidationError(
-                "No se pueden eliminar detalles de una venta completada o cancelada."
-            )
-        super().perform_destroy(instance)
+class AuditoriaViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = Auditoria.objects.select_related('usuario', 'venta').all()
+    serializer_class = AuditoriaSerializer
+    permission_classes = [SoloLecturaGerencial]
+
+
+class MovimientoStockViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = MovimientoStock.objects.select_related('usuario', 'venta', 'sabor').all()
+    serializer_class = MovimientoStockSerializer
+    permission_classes = [SoloLecturaGerencial]
+
+
+class MovimientoEnvaseViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = MovimientoEnvase.objects.select_related('usuario', 'venta', 'envase').all()
+    serializer_class = MovimientoEnvaseSerializer
+    permission_classes = [SoloLecturaGerencial]

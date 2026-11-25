@@ -7,6 +7,7 @@ import sabores_routes from "./sabores_routes";
 import productos_routes from "./productos_routes";
 import ventas_routes from "./ventas_routes";
 import detalles_routes from "./detalles_routes";
+import envases_routes from "./envases_routes.ts";
 
 const routes = [
   {
@@ -21,6 +22,7 @@ const routes = [
   ...productos_routes,
   ...ventas_routes,
   ...detalles_routes,
+  ...envases_routes,
 ];
 
 const router = createRouter({
