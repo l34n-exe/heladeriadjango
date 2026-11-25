@@ -2,23 +2,13 @@
   <div>
     <v-card
       class="mx-auto pa-6"
-      max-width="500"
+      max-width="900"
       elevation="16"
       color="aliceblue"
     >
       <v-card-title class="text-h6 text-center">CREAR VENTA</v-card-title>
 
       <v-form @submit.prevent="crear" ref="form">
-        <v-select
-          v-model="venta.estado"
-          :items="estadoOptions"
-          item-title="title"
-          item-value="value"
-          label="Estado"
-          variant="outlined"
-          required
-        />
-
         <v-select
           v-model.number="venta.cliente"
           :items="clientesOptions"
@@ -27,17 +17,6 @@
           label="Cliente"
           clearable
           variant="outlined"
-        />
-
-        <v-select
-          v-model.number="venta.empleado"
-          :items="empleadosOptions"
-          item-title="nombreCompleto"
-          item-value="id"
-          label="Empleado"
-          variant="outlined"
-          :rules="[(v) => Number(v) > 0 || 'Seleccione un empleado']"
-          required
         />
 
         <v-select
@@ -50,12 +29,7 @@
           required
         />
 
-        <v-text-field
-          v-model="venta.total"
-          label="Total"
-          variant="outlined"
-          disabled
-        />
+        <VentaDetallesForm v-model="detalles" />
 
         <ButtonComponent type="submit" class="crear mt-4">
           <template #pre-icon>
@@ -101,19 +75,18 @@
 import { computed, onMounted, ref, toRefs } from "vue";
 import useVentasStore from "../../stores/ventas";
 import useClientesStore from "../../stores/clientes";
-import useEmpleadosStore from "../../stores/empleados";
 import ButtonComponent from "../ButtonComponent.vue";
+import VentaDetallesForm from "./VentaDetallesForm.vue";
+import { getApiErrorMessage } from "../../plugins/axios";
 import { Icon } from "@iconify/vue";
-import type { Venta } from "../../interfaces/Venta";
+import type { DetalleVentaItem, Venta } from "../../interfaces/Venta";
 import { useFormFeedback } from "../../composables/useFormFeedback";
 
 const ventasStore = useVentasStore();
 const clientesStore = useClientesStore();
-const empleadosStore = useEmpleadosStore();
 
 const { venta } = toRefs(ventasStore);
 const { clientes } = toRefs(clientesStore);
-const { empleados } = toRefs(empleadosStore);
 const { create } = ventasStore;
 const form = ref<{
   validate: () => Promise<boolean>;
@@ -122,7 +95,7 @@ const form = ref<{
 const { snackbar, snackbarColor, snackbarText, showFeedback, validateForm } =
   useFormFeedback();
 
-const estadoOptions = [{ title: "Pendiente", value: "PENDIENTE" }];
+const detalles = ref<DetalleVentaItem[]>([]);
 const metodoPagoOptions = [
   { title: "Efectivo", value: "EFECTIVO" },
   { title: "Tarjeta", value: "TARJETA" },
@@ -136,14 +109,6 @@ const clientesOptions = computed(() =>
   })),
 );
 
-const empleadosOptions = computed(() =>
-  empleados.value.map((empleado) => ({
-    ...empleado,
-    nombreCompleto:
-      `${empleado.nombre} ${empleado.apellido} - ${empleado.puesto}`.trim(),
-  })),
-);
-
 function limpiarVenta() {
   venta.value = {
     id: 0,
@@ -154,6 +119,7 @@ function limpiarVenta() {
     fecha_venta: "",
     total: "0.00",
   } satisfies Venta;
+  detalles.value = [{ producto: 0, cantidad: 1, sabores: [] }];
 }
 
 const crear = async () => {
@@ -172,6 +138,11 @@ const crear = async () => {
       metodo_pago: venta.value.metodo_pago || "EFECTIVO",
       fecha_venta: venta.value.fecha_venta,
       total: "0.00",
+      detalles: detalles.value.map(({ producto, cantidad, sabores }) => ({
+        producto,
+        cantidad: Number(cantidad),
+        sabores,
+      })),
     };
 
     await create(data);
@@ -180,13 +151,15 @@ const crear = async () => {
     showFeedback("Venta creada con éxito.", "success");
   } catch (error) {
     console.error("Error al crear la venta:", error);
-    showFeedback("No se pudo crear la venta. Intenta nuevamente.", "error");
+    showFeedback(
+      `No se pudo crear la venta: ${getApiErrorMessage(error)}`,
+      "error",
+    );
   }
 };
 
 onMounted(async () => {
   await clientesStore.getAll();
-  await empleadosStore.getAll();
   limpiarVenta();
 });
 </script>

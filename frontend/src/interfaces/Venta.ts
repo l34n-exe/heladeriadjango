@@ -1,3 +1,12 @@
+export interface DetalleVentaItem {
+  id?: number;
+  producto: number;
+  cantidad: number;
+  sabores: number[];
+  precio_unitario?: string | null;
+  subtotal?: string;
+}
+
 export interface Venta {
   id: number;
   estado: string;
@@ -6,4 +15,6 @@ export interface Venta {
   metodo_pago: string;
   fecha_venta: string;
   total: string;
+  empleado_nombre?: string;
+  detalles?: DetalleVentaItem[];
 }

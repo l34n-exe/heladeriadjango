@@ -27,9 +27,25 @@ class ApiService {
     return cleanResource ? `${cleanResource}/` : "/";
   }
 
-  static async getAll(url: string) {
-    const response = await axios.get(this.buildCollectionUrl(url));
-    return response.data;
+  // Recorre todas las páginas de una respuesta paginada de DRF ({ count, next, results }).
+  static async getAll(url: string): Promise<any> {
+    let nextUrl: string | null = this.buildCollectionUrl(url);
+    const items: unknown[] = [];
+
+    while (nextUrl) {
+      const response: { data: any } = await axios.get(nextUrl);
+      const data: { next?: string | null; results?: unknown[] } | null =
+        response.data;
+
+      if (!data || !Array.isArray(data.results)) {
+        return data;
+      }
+
+      items.push(...(data.results as unknown[]));
+      nextUrl = data.next ?? null;
+    }
+
+    return items;
   }
 
   static async getOne(url: string, id: number | string) {
@@ -51,14 +67,16 @@ class ApiService {
     await axios.delete(this.buildItemUrl(url, id));
   }
 
-  static async putAction(
+  static async postAction(
     url: string,
     id: number | string,
     action: string,
     data: object = {},
   ) {
-    const resourcePath = this.buildResourceUrl(url, id);
-    const response = await axios.put(`${resourcePath}/${action}/`, data);
+    const response = await axios.post(
+      `${this.buildItemUrl(url, id)}${action}/`,
+      data,
+    );
     return response.data;
   }
 }

@@ -33,33 +33,6 @@
           }}
         </p>
         <div class="acciones">
-          <ButtonComponent
-            :to="{ name: 'detalles_edit', params: { id: detalle.id } }"
-            style="color: #1976d2"
-          >
-            <template #pre-icon
-              ><Icon
-                icon="material-symbols:edit-outline"
-                width="28"
-                height="28"
-                style="color: #1976d2"
-            /></template>
-            EDITAR
-          </ButtonComponent>
-          <ButtonComponent
-            @click="requestDelete(detalle.id as number)"
-            style="color: red"
-          >
-            <template #pre-icon
-              ><Icon
-                icon="typcn:delete-outline"
-                width="28"
-                height="28"
-                style="color: red"
-              ></Icon
-            ></template>
-            Eliminar
-          </ButtonComponent>
         </div>
       </v-card-text>
     </v-card>
@@ -74,50 +47,26 @@
       VOLVER A LA LISTA
     </ButtonComponent>
 
-    <ConfirmDialog
-      v-model="confirmDialog"
-      title="Eliminar detalle"
-      message="¿Eliminar este detalle de venta? Esta acción no se puede deshacer."
-      @confirm="deleteDetalle"
-    />
-    <v-snackbar
-      v-model="snackbar"
-      :color="snackbarColor"
-      timeout="3500"
-      location="top right"
-    >
-      {{ snackbarText }}
-      <template #actions>
-        <v-btn variant="text" @click="snackbar = false">Cerrar</v-btn>
-      </template>
-    </v-snackbar>
   </div>
 </template>
 
 <script setup lang="ts">
-import { toRefs, onMounted, ref } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import { toRefs, onMounted } from "vue";
+import { useRoute } from "vue-router";
 import useDetallesStore from "../../stores/detalles";
 import useVentasStore from "../../stores/ventas";
 import useProductosStore from "../../stores/productos";
 import useSaboresStore from "../../stores/sabores";
 import ButtonComponent from "../ButtonComponent.vue";
-import ConfirmDialog from "../ConfirmDialog.vue";
 import { Icon } from "@iconify/vue";
-import { useFormFeedback } from "../../composables/useFormFeedback";
 
 const store = useDetallesStore();
 const { detalle } = toRefs(store);
 const { ventas } = toRefs(useVentasStore());
 const { productos } = toRefs(useProductosStore());
 const { sabores } = toRefs(useSaboresStore());
-const { getOne, destroy } = store;
+const { getOne } = store;
 const route = useRoute();
-const router = useRouter();
-const { snackbar, snackbarColor, snackbarText, showFeedback } =
-  useFormFeedback();
-const confirmDialog = ref(false);
-const pendingDeleteId = ref<number | null>(null);
 
 const getVentaNombre = (id: number) => {
   const venta = ventas.value.find((item) => item.id === id);
@@ -132,26 +81,6 @@ const getProductoNombre = (id: number) => {
 const getSaborNombre = (id: number) => {
   const sabor = sabores.value.find((item) => item.id === id);
   return sabor ? sabor.nombre : `ID ${id}`;
-};
-
-const requestDelete = (id: number) => {
-  pendingDeleteId.value = id;
-  confirmDialog.value = true;
-};
-
-const deleteDetalle = async () => {
-  const id = pendingDeleteId.value;
-  if (id === null) return;
-  try {
-    await destroy(id);
-    router.push({ name: "detalles_list" });
-  } catch (error) {
-    console.error(error);
-    showFeedback(
-      "No se puede eliminar este detalle en su estado actual.",
-      "error",
-    );
-  }
 };
 
 onMounted(async () => {

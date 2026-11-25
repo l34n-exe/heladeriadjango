@@ -4,7 +4,7 @@
       class="mx-auto my-8"
       variant="outlined"
       elevation="16"
-      max-width="420"
+      max-width="640"
     >
       <v-card-title class="text-h6 text-center"
         >Detalle de la venta</v-card-title
@@ -22,7 +22,37 @@
         <p><strong>MÉTODO DE PAGO:</strong> {{ venta.metodo_pago }}</p>
         <p><strong>FECHA:</strong> {{ formatDate(venta.fecha_venta) }}</p>
         <p><strong>TOTAL:</strong> {{ venta.total }}</p>
+        <v-table v-if="venta.detalles?.length" density="compact" class="my-3">
+          <thead>
+            <tr>
+              <th>PRODUCTO</th>
+              <th>CANT.</th>
+              <th>SABORES</th>
+              <th>SUBTOTAL</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="detalle in venta.detalles" :key="detalle.id">
+              <td>{{ getProductoNombre(detalle.producto) }}</td>
+              <td>{{ detalle.cantidad }}</td>
+              <td>{{ detalle.sabores.map(getSaborNombre).join(", ") || "-" }}</td>
+              <td>{{ detalle.subtotal }}</td>
+            </tr>
+          </tbody>
+        </v-table>
         <div class="acciones">
+          <template v-if="venta.estado === 'PENDIENTE'">
+            <v-btn color="success" @click="ejecutar('completar')">Completar</v-btn>
+            <v-btn color="warning" @click="ejecutar('cancelar')">Cancelar</v-btn>
+          </template>
+          <v-btn
+            v-if="venta.estado === 'COMPLETADA'"
+            color="deep-purple"
+            @click="ejecutar('reembolsar')"
+            >Reembolsar</v-btn
+          >
+        </div>
+        <div v-if="venta.estado === 'PENDIENTE'" class="acciones">
           <ButtonComponent
             :to="{ name: 'ventas_edit', params: { id: venta.id } }"
             style="color: #1976d2"
@@ -90,6 +120,9 @@ import { useRoute, useRouter } from "vue-router";
 import useVentasStore from "../../stores/ventas";
 import useClientesStore from "../../stores/clientes";
 import useEmpleadosStore from "../../stores/empleados";
+import useProductosStore from "../../stores/productos";
+import useSaboresStore from "../../stores/sabores";
+import { getApiErrorMessage } from "../../plugins/axios";
 import ButtonComponent from "../ButtonComponent.vue";
 import ConfirmDialog from "../ConfirmDialog.vue";
 import { Icon } from "@iconify/vue";
@@ -99,6 +132,8 @@ const store = useVentasStore();
 const { venta } = toRefs(store);
 const { clientes } = toRefs(useClientesStore());
 const { empleados } = toRefs(useEmpleadosStore());
+const { productos } = toRefs(useProductosStore());
+const { sabores } = toRefs(useSaboresStore());
 const { getOne, destroy } = store;
 const route = useRoute();
 const router = useRouter();
@@ -115,6 +150,28 @@ const getClienteNombre = (id: number | null) => {
 const getEmpleadoNombre = (id: number) => {
   const empleado = empleados.value.find((item) => item.id === id);
   return empleado ? `${empleado.nombre} ${empleado.apellido}` : `ID ${id}`;
+};
+
+const getProductoNombre = (id: number) =>
+  productos.value.find((item) => item.id === id)?.nombre ?? `ID ${id}`;
+
+const getSaborNombre = (id: number) =>
+  sabores.value.find((item) => item.id === id)?.nombre ?? `ID ${id}`;
+
+const mensajesAccion = {
+  completar: "Venta completada.",
+  cancelar: "Venta cancelada.",
+  reembolsar: "Venta reembolsada.",
+} as const;
+
+const ejecutar = async (accion: keyof typeof mensajesAccion) => {
+  try {
+    await store[accion](venta.value.id);
+    showFeedback(mensajesAccion[accion], "success");
+  } catch (error) {
+    console.error(error);
+    showFeedback(getApiErrorMessage(error), "error");
+  }
 };
 
 const formatDate = (value: string) => {
@@ -135,16 +192,15 @@ const deleteVenta = async () => {
     router.push({ name: "ventas_list" });
   } catch (error) {
     console.error(error);
-    showFeedback(
-      "No se puede eliminar esta venta en su estado actual.",
-      "error",
-    );
+    showFeedback(getApiErrorMessage(error), "error");
   }
 };
 
 onMounted(async () => {
   await useClientesStore().getAll();
   await useEmpleadosStore().getAll();
+  await useProductosStore().getAll();
+  await useSaboresStore().getAll();
   const id = Number(route.params.id);
   if (id) {
     await getOne(id);

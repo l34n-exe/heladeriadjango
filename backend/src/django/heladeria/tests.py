@@ -708,3 +708,146 @@ class EnvaseStockTests(TestCase):
         self.envase.refresh_from_db()
         self.assertEqual(venta.estado, Venta.PENDIENTE)
         self.assertEqual(self.envase.stock_unidades, 1)
+
+
+class VentaFlujoApiTests(APITestCase):
+    def setUp(self):
+        self.user_cajero = User.objects.create_user(username='flujo-cajero', password='password123')
+        self.cajero = Empleado.objects.create(
+            nombre='Ana', apellido='Caja', email='ana-flujo@heladeria.com',
+            puesto=Empleado.CAJERO, user=self.user_cajero,
+        )
+        self.user_gerente = User.objects.create_user(username='flujo-gerente', password='password123')
+        Empleado.objects.create(
+            nombre='Gus', apellido='Gerente', email='gus-flujo@heladeria.com',
+            puesto=Empleado.GERENTE, user=self.user_gerente,
+        )
+        self.envase = Envase.objects.create(nombre='Pote flujo', stock_unidades=5)
+        self.sabor = Sabor.objects.create(
+            nombre='Frutilla', categoria=Sabor.FRUTAL, stock_kg=Decimal('5.000'), disponible=True,
+        )
+        self.producto = Producto.objects.create(
+            nombre='Pote 1KG flujo', tipo_producto=Producto.POTE_1KG, gramos=1000,
+            max_sabores=1, precio_base=Decimal('1000.00'), envase=self.envase,
+        )
+        self.client.force_authenticate(user=self.user_cajero)  # type: ignore
+
+    def crear_venta_api(self):
+        response = self.client.post('/heladerias/ventas/', {
+            'metodo_pago': 'EFECTIVO',
+            'detalles': [{'producto': self.producto.pk, 'cantidad': 1, 'sabores': [self.sabor.pk]}],
+        }, format='json')
+        self.assertEqual(response.status_code, 201, response.data)  # type: ignore[attr-defined]
+        return Venta.objects.get(pk=response.data['id'])  # type: ignore[attr-defined]
+
+    def test_completar_venta_descuenta_stock_y_envases(self):
+        venta = self.crear_venta_api()
+
+        response = self.client.post(f'/heladerias/ventas/{venta.pk}/completar/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['estado'], Venta.COMPLETADA)  # type: ignore[attr-defined]
+        self.sabor.refresh_from_db()
+        self.envase.refresh_from_db()
+        self.assertEqual(self.sabor.stock_kg, Decimal('4.000'))
+        self.assertEqual(self.envase.stock_unidades, 4)
+
+    def test_completar_sin_stock_devuelve_400_y_no_cambia_estado(self):
+        venta = self.crear_venta_api()
+        Sabor.objects.filter(pk=self.sabor.pk).update(stock_kg=Decimal('0.500'))
+
+        response = self.client.post(f'/heladerias/ventas/{venta.pk}/completar/')
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('detail', response.data)  # type: ignore[attr-defined]
+        venta.refresh_from_db()
+        self.assertEqual(venta.estado, Venta.PENDIENTE)
+
+    def test_completar_venta_cancelada_devuelve_400(self):
+        venta = self.crear_venta_api()
+        self.client.post(f'/heladerias/ventas/{venta.pk}/cancelar/')
+
+        response = self.client.post(f'/heladerias/ventas/{venta.pk}/completar/')
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_no_se_puede_borrar_venta_completada(self):
+        venta = self.crear_venta_api()
+        self.client.post(f'/heladerias/ventas/{venta.pk}/completar/')
+
+        response = self.client.delete(f'/heladerias/ventas/{venta.pk}/')
+
+        self.assertEqual(response.status_code, 400)
+        self.assertTrue(Venta.objects.filter(pk=venta.pk).exists())
+
+    def test_se_puede_borrar_venta_pendiente(self):
+        venta = self.crear_venta_api()
+
+        response = self.client.delete(f'/heladerias/ventas/{venta.pk}/')
+
+        self.assertEqual(response.status_code, 204)
+        self.assertFalse(Venta.objects.filter(pk=venta.pk).exists())
+
+    def test_borrar_producto_con_ventas_devuelve_409(self):
+        self.crear_venta_api()
+        self.client.force_authenticate(user=self.user_gerente)  # type: ignore
+
+        response = self.client.delete(f'/heladerias/productos/{self.producto.pk}/')
+
+        self.assertEqual(response.status_code, 409)
+        self.assertTrue(Producto.objects.filter(pk=self.producto.pk).exists())
+
+    def test_detalles_de_venta_son_solo_lectura(self):
+        venta = self.crear_venta_api()
+        detalle = venta.detalles.get()  # type: ignore[attr-defined]
+
+        listado = self.client.get('/heladerias/detalle-ventas/')
+        alta = self.client.post('/heladerias/detalle-ventas/', {
+            'venta': venta.pk, 'producto': self.producto.pk, 'cantidad': 1, 'sabores': [],
+        }, format='json')
+        edicion = self.client.patch(f'/heladerias/detalle-ventas/{detalle.pk}/', {'cantidad': 3}, format='json')
+
+        self.assertEqual(listado.status_code, 200)
+        self.assertEqual(listado.data['results'][0]['venta'], venta.pk)  # type: ignore[attr-defined]
+        self.assertEqual(alta.status_code, 405)
+        self.assertEqual(edicion.status_code, 405)
+
+    def test_gerente_lista_movimientos_de_envases(self):
+        venta = self.crear_venta_api()
+        self.client.post(f'/heladerias/ventas/{venta.pk}/completar/')
+        self.client.force_authenticate(user=self.user_gerente)  # type: ignore
+
+        response = self.client.get('/heladerias/movimientos-envases/')
+
+        self.assertEqual(response.status_code, 200)
+        movimiento = response.data['results'][0]  # type: ignore[attr-defined]
+        self.assertEqual(movimiento['envase_nombre'], self.envase.nombre)
+        self.assertEqual(movimiento['usuario_nombre'], self.user_cajero.username)
+
+
+class DetalleVentaCambioProductoTests(TestCase):
+    def test_cambiar_producto_actualiza_precio_y_gramos(self):
+        user = User.objects.create_user(username='detalle-cambio', password='x')
+        empleado = Empleado.objects.create(
+            nombre='Eva', apellido='Caja', email='eva-detalle@heladeria.com',
+            puesto=Empleado.CAJERO, user=user,
+        )
+        chico = Producto.objects.create(
+            nombre='Cucurucho', tipo_producto=Producto.CUCURUCHO, gramos=150,
+            max_sabores=1, precio_base=Decimal('100.00'),
+        )
+        grande = Producto.objects.create(
+            nombre='Pote 1KG cambio', tipo_producto=Producto.POTE_1KG, gramos=1000,
+            max_sabores=1, precio_base=Decimal('900.00'),
+        )
+        venta = Venta.objects.create(empleado=empleado)
+        detalle = DetalleVenta.objects.create(venta=venta, producto=chico, cantidad=1)
+
+        detalle.producto = grande
+        detalle.save()
+
+        detalle.refresh_from_db()
+        venta.refresh_from_db()
+        self.assertEqual(detalle.precio_unitario, Decimal('900.00'))
+        self.assertEqual(detalle.gramos_unitarios, 1000)
+        self.assertEqual(venta.total, Decimal('900.00'))

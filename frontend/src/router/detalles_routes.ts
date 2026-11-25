@@ -17,18 +17,6 @@ const detalles_routes = [
         component: () => import("../components/detalles/DetallesShow.vue"),
         meta: { requiresAuth: true },
       },
-      {
-        path: "create",
-        name: "detalles_create",
-        component: () => import("../components/detalles/DetallesCreate.vue"),
-        meta: { requiresAuth: true },
-      },
-      {
-        path: ":id/edit",
-        name: "detalles_edit",
-        component: () => import("../components/detalles/DetallesUpdate.vue"),
-        meta: { requiresAuth: true },
-      },
     ],
   },
 ];

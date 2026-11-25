@@ -1,7 +1,6 @@
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from django.core.exceptions import ValidationError
 
 from .models import (
     Empleado, Cliente, Sabor, Producto, Venta, DetalleVenta,
@@ -53,27 +52,27 @@ class VentaViewSet(viewsets.ModelViewSet):
         empleado = getattr(self.request.user, 'empleado', None)
         serializer.save(empleado=empleado)
 
-    @action(detail=True, methods=['post'],permission_classes=[EsCajeroOGerente])
-    def cancelar(self, request, pk=None):
+    def _cambiar_estado(self, request, nuevo_estado):
         venta = self.get_object()
-        try:
-            venta.cambiar_estado(Venta.CANCELADA, usuario=request.user)
-            return Response({'status': 'Venta cancelada exitosamente.'})
-        except ValidationError as e:
-            return Response({'error': str(e)}, status=400)
+        venta.cambiar_estado(nuevo_estado, usuario=request.user)
+        return Response(self.get_serializer(venta).data)
+
+    @action(detail=True, methods=['post'], permission_classes=[EsCajeroOGerente])
+    def completar(self, request, pk=None):
+        return self._cambiar_estado(request, Venta.COMPLETADA)
+
+    @action(detail=True, methods=['post'], permission_classes=[EsCajeroOGerente])
+    def cancelar(self, request, pk=None):
+        return self._cambiar_estado(request, Venta.CANCELADA)
 
     @action(detail=True, methods=['post'], permission_classes=[EsGerente])
     def reembolsar(self, request, pk=None):
-        venta = self.get_object()
-        try:
-            venta.cambiar_estado(Venta.REEMBOLSADA, usuario=request.user)
-            return Response({'status': 'Venta reembolsada exitosamente con devolución de stock.'})
-        except ValidationError as e:
-            return Response({'error': str(e)}, status=400)
+        return self._cambiar_estado(request, Venta.REEMBOLSADA)
 
 
-class DetalleVentaViewSet(viewsets.ModelViewSet):
-    queryset = DetalleVenta.objects.all()
+class DetalleVentaViewSet(viewsets.ReadOnlyModelViewSet):
+    """Los detalles se crean y editan solo a través de la venta (VentaSerializer)."""
+    queryset = DetalleVenta.objects.select_related('producto', 'venta').prefetch_related('sabores').order_by('-pk')
     serializer_class = DetalleVentaSerializer
     permission_classes = [EsCajeroOGerente]
 

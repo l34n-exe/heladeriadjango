@@ -54,8 +54,8 @@ class DetalleVentaSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = DetalleVenta
-        fields = ['id', 'producto', 'cantidad', 'precio_unitario', 'subtotal', 'gramos_unitarios', 'sabores']
-        read_only_fields = ['subtotal', 'gramos_unitarios', 'precio_unitario']
+        fields = ['id', 'venta', 'producto', 'cantidad', 'precio_unitario', 'subtotal', 'gramos_unitarios', 'sabores']
+        read_only_fields = ['venta', 'subtotal', 'gramos_unitarios', 'precio_unitario']
 
     def validate(self, data):
         producto = data.get('producto')
@@ -195,12 +195,17 @@ class AuditoriaSerializer(serializers.ModelSerializer):
 
 
 class MovimientoEnvaseSerializer(serializers.ModelSerializer):
-    sabor_nombre = serializers.CharField(source='envase.nombre', read_only=True)
+    envase_nombre = serializers.CharField(source='envase.nombre', read_only=True)
+    usuario_nombre = serializers.CharField(source='usuario.username', read_only=True, allow_null=True)
 
     class Meta:
         model = MovimientoEnvase
-        fields = '__all__'
-        read_only_fields = '__all__'
+        fields = [
+            'id', 'venta', 'usuario', 'usuario_nombre', 'envase',
+            'envase_nombre', 'tipo_movimiento', 'cantidad_unidades',
+            'stock_anterior', 'stock_nuevo', 'fecha', 'motivo',
+        ]
+        read_only_fields = fields
 
 
 class MovimientoStockSerializer(serializers.ModelSerializer):

@@ -2,23 +2,22 @@
   <div>
     <v-card
       class="mx-auto pa-6"
-      max-width="500"
+      max-width="900"
       elevation="16"
       color="aliceblue"
     >
       <v-card-title class="text-h6 text-center">ACTUALIZAR VENTA</v-card-title>
 
-      <v-form @submit.prevent="actualizar" ref="form">
-        <v-select
-          v-model="venta.estado"
-          :items="estadoOptions"
-          item-title="title"
-          item-value="value"
-          label="Estado"
-          variant="outlined"
-          required
-        />
+      <v-alert
+        v-if="venta.estado && venta.estado !== 'PENDIENTE'"
+        type="warning"
+        variant="tonal"
+        class="mb-4"
+      >
+        Solo se pueden editar ventas pendientes (estado actual: {{ venta.estado }}).
+      </v-alert>
 
+      <v-form @submit.prevent="actualizar" ref="form">
         <v-select
           v-model.number="venta.cliente"
           :items="clientesOptions"
@@ -27,17 +26,6 @@
           label="Cliente"
           clearable
           variant="outlined"
-        />
-
-        <v-select
-          v-model.number="venta.empleado"
-          :items="empleadosOptions"
-          item-title="nombreCompleto"
-          item-value="id"
-          label="Empleado"
-          variant="outlined"
-          :rules="[(v) => Number(v) > 0 || 'Seleccione un empleado']"
-          required
         />
 
         <v-select
@@ -50,12 +38,7 @@
           required
         />
 
-        <v-text-field
-          v-model="venta.total"
-          label="Total"
-          variant="outlined"
-          disabled
-        />
+        <VentaDetallesForm v-if="venta.detalles" v-model="venta.detalles" />
 
         <ButtonComponent type="submit" class="actualizar mt-4">
           <template #pre-icon>
@@ -102,8 +85,9 @@ import { computed, onMounted, ref, toRefs } from "vue";
 import { useRoute } from "vue-router";
 import useVentasStore from "../../stores/ventas";
 import useClientesStore from "../../stores/clientes";
-import useEmpleadosStore from "../../stores/empleados";
 import ButtonComponent from "../ButtonComponent.vue";
+import VentaDetallesForm from "./VentaDetallesForm.vue";
+import { getApiErrorMessage } from "../../plugins/axios";
 import { Icon } from "@iconify/vue";
 import type { Venta } from "../../interfaces/Venta";
 import { useFormFeedback } from "../../composables/useFormFeedback";
@@ -111,11 +95,9 @@ import { useFormFeedback } from "../../composables/useFormFeedback";
 const route = useRoute();
 const ventasStore = useVentasStore();
 const clientesStore = useClientesStore();
-const empleadosStore = useEmpleadosStore();
 
 const { venta } = toRefs(ventasStore);
 const { clientes } = toRefs(clientesStore);
-const { empleados } = toRefs(empleadosStore);
 const { getOne, update } = ventasStore;
 const form = ref<{
   validate: () => Promise<boolean>;
@@ -123,12 +105,6 @@ const form = ref<{
 } | null>(null);
 const { snackbar, snackbarColor, snackbarText, showFeedback, validateForm } =
   useFormFeedback();
-
-const estadoOptions = [
-  { title: "Pendiente", value: "PENDIENTE" },
-  { title: "Completada", value: "COMPLETADA" },
-  { title: "Cancelada", value: "CANCELADA" },
-];
 
 const metodoPagoOptions = [
   { title: "Efectivo", value: "EFECTIVO" },
@@ -140,14 +116,6 @@ const clientesOptions = computed(() =>
   clientes.value.map((cliente) => ({
     ...cliente,
     nombreCompleto: `${cliente.nombre} ${cliente.apellido}`.trim(),
-  })),
-);
-
-const empleadosOptions = computed(() =>
-  empleados.value.map((empleado) => ({
-    ...empleado,
-    nombreCompleto:
-      `${empleado.nombre} ${empleado.apellido} - ${empleado.puesto}`.trim(),
   })),
 );
 
@@ -182,6 +150,13 @@ const actualizar = async () => {
       metodo_pago: venta.value.metodo_pago || "EFECTIVO",
       fecha_venta: venta.value.fecha_venta,
       total: venta.value.total,
+      detalles: (venta.value.detalles ?? []).map(
+        ({ producto, cantidad, sabores }) => ({
+          producto,
+          cantidad: Number(cantidad),
+          sabores,
+        }),
+      ),
     };
 
     await update(data);
@@ -191,7 +166,7 @@ const actualizar = async () => {
   } catch (error) {
     console.error("Error al actualizar la venta:", error);
     showFeedback(
-      "No se pudo actualizar la venta. Intenta nuevamente.",
+      `No se pudo actualizar la venta: ${getApiErrorMessage(error)}`,
       "error",
     );
   }
@@ -199,7 +174,6 @@ const actualizar = async () => {
 
 onMounted(async () => {
   await clientesStore.getAll();
-  await empleadosStore.getAll();
   const id = Number(route.params.id);
   if (id) {
     await getOne(id);

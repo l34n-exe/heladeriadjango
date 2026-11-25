@@ -404,6 +404,15 @@ class Venta(models.Model):
                     ),
                 )
 
+    def delete(self, *args, **kwargs):
+        if self.pk:
+            estado_en_db = Venta.objects.values_list('estado', flat=True).get(pk=self.pk)
+            if estado_en_db != self.PENDIENTE:
+                raise ValidationError(
+                    'Solo se pueden eliminar ventas pendientes. Para anularla, cancelala o reembolsala.'
+                )
+        return super().delete(*args, **kwargs)
+
     def _procesar_puntos_socio(self):
         cliente_id = getattr(self, 'cliente_id', None)
         if not cliente_id:
@@ -724,6 +733,13 @@ class DetalleVenta(models.Model):
                 raise ValidationError(
                     "No se pueden agregar detalles a una venta que no está pendiente."
                 )
+
+        if self.pk:
+            producto_en_db = DetalleVenta.objects.values_list('producto_id', flat=True).get(pk=self.pk)
+            if producto_en_db != self.producto_id:
+                # Al cambiar de producto, el precio y los gramos deben tomarse del producto nuevo.
+                self.precio_unitario = None
+                self.gramos_unitarios = None
 
         if self.precio_unitario is None:
             self.precio_unitario = self.producto.precio_base

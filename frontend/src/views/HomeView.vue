@@ -95,6 +95,12 @@ const modules = [
     to: { name: "productos_list" },
   },
   {
+    title: "Envases",
+    description: "Controlar el stock de potes, vasos y cucuruchos.",
+    icon: "📦",
+    to: { name: "envases_list" },
+  },
+  {
     title: "Ventas",
     description: "Revisar estado, total y detalle comercial.",
     icon: "💳",
