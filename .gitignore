@@ -1,5 +1,26 @@
-DS_Store
-.code 
+# SO / editores
+.DS_Store
+.code
+.vscode/
+.idea/
+
+# Python
+__pycache__/
 *.pyc
+*.sqlite3
+.ruff_cache/
+.pytest_cache/
+
+# Node / Vite
+node_modules/
+dist/
+
+# Entorno y datos locales
 .env
-data
+data/
+
+# Archivos generados / temporales
+console.log
+*.log
+arbol.txt
+.playwright-mcp/
